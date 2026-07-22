@@ -6,20 +6,19 @@ on:
 env:
   # === Настройки компиляции ===
   KERNEL_ARCH: arm64
-  DEFCONFIG_FILE: "lavender-perf_defconfig"
+  DEFCONFIG_FILE: "miatoll_defconfig"
   OUT_DIR: out
   
   # === Компилятор: Proton Clang (Pure LLVM) ===
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Флаги хост-компилятора и LLVM (Фикс совместимости с Ubuntu 24.04) ===
+  # === Флаги хост-компилятора и LLVM ===
   HOST_COMPILER_FLAGS: "-fcommon"
-  HOST_LINKER_FLAGS: "-fuse-ld=lld"
   LLVM_FLAGS: "LLVM=1 LLVM_IAS=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
-  DEVICE_CODENAME: lavender
+  DEVICE_CODENAME: miatoll
   
   # === Пути к исходным и промежуточным файлам ===
   IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
@@ -39,7 +38,8 @@ env:
 jobs:
   build_core:
     name: Build Core
-    runs-on: ubuntu-latest
+    # Фиксируем версию ОС для идеальной совместимости системных библиотек с Clang
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout Source Code
@@ -56,10 +56,10 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
           echo "Генерация конфигурации..."
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}" HOSTLDFLAGS="${{ env.HOST_LINKER_FLAGS }}"
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
           echo "Запуск компиляции Full LLVM..."
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}" HOSTLDFLAGS="${{ env.HOST_LINKER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
