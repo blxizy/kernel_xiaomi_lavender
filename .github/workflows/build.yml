@@ -6,7 +6,7 @@ on:
 env:
   # === Настройки компиляции ===
   KERNEL_ARCH: arm64
-  DEFCONFIG_FILE: "miatoll_defconfig"
+  DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
   # === Компилятор: Proton Clang (Pure LLVM) ===
@@ -18,7 +18,7 @@ env:
   LLVM_FLAGS: "LLVM=1 LLVM_IAS=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
-  DEVICE_CODENAME: miatoll
+  DEVICE_CODENAME: lavender
   
   # === Пути к исходным и промежуточным файлам ===
   IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
@@ -38,7 +38,6 @@ env:
 jobs:
   build_core:
     name: Build Core
-    # Фиксируем версию ОС для идеальной совместимости системных библиотек с Clang
     runs-on: ubuntu-22.04
 
     steps:
@@ -81,14 +80,11 @@ jobs:
         run: |
           if [ -f "${{ env.BOOT_ARCHIVE_PATH }}" ]; then
             echo "Архив донорского образа обнаружен. Запуск извлечения..."
-            
-            # Распаковываем архив прямо в текущую директорию (внутри архива файл должен называться boot.img)
             unzip -q ${{ env.BOOT_ARCHIVE_PATH }} -d .
             
             cp ${{ env.MAGISKBOOT_PATH }} magiskboot
             chmod +x magiskboot
             
-            # magiskboot читает распакованный boot.img
             ./magiskboot unpack boot.img
             cp ${{ env.ARTIFACT_RAW }} kernel
             ./magiskboot repack boot.img ${{ env.ARTIFACT_BOOT }}
