@@ -9,6 +9,10 @@ env:
   DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
+  # === Кросс-компиляторы (Добавлено для решения ошибки vDSO) ===
+  COMPILER_64: aarch64-linux-gnu-
+  COMPILER_32: arm-linux-gnueabi-
+  
   # === Целевое устройство ===
   DEVICE_CODENAME: lavender
   
@@ -36,11 +40,16 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
+      - name: Install Compiler Dependencies
+        run: |
+          echo "Установка необходимых кросс-компиляторов..."
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
       - name: Compile Kernel (Naked Base)
         run: |
           make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} ${{ env.DEFCONFIG_FILE }}
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }}
-
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }}
       - name: Package Format 1 (Raw Kernel)
         run: |
           cp ${{ env.IMAGE_PATH }} ${{ env.ARTIFACT_RAW }}
