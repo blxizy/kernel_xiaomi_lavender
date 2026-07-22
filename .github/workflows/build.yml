@@ -13,7 +13,7 @@ env:
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы (Необходимы для старых Makefile) ===
+  # === Кросс-компиляторы (Необходимы как запасной вариант для vDSO) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
@@ -48,12 +48,18 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
+      - name: Install Base Dependencies
+        run: |
+          echo "Установка базовых компонентов кросс-компиляции (GCC)..."
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
       - name: Download Clang Toolchain
         run: |
           echo "Инициализация Proton Clang..."
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
 
-      - name: Compile Kernel (Pure LLVM)
+      - name: Compile Kernel (Full LLVM + GCC Fallback)
         run: |
           echo "Интеграция Clang в системный путь..."
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
