@@ -21,7 +21,7 @@ env:
   ARTIFACT_BOOT: Sirinarity-boot.img
   
   # === Ресурсы для перепаковки (Format 3) ===
-  BOOT_TEMPLATE_PATH: .github/templates/boot.img
+  BOOT_ARCHIVE_PATH: .github/templates/boot.zip
   MAGISKBOOT_PATH: .github/tools/magiskboot
   
   # === Внешние репозитории ===
@@ -59,18 +59,21 @@ jobs:
 
       - name: Package Format 3 (Repack boot.img)
         run: |
-          if [ -f "${{ env.BOOT_TEMPLATE_PATH }}" ]; then
-            echo "Шаблон загрузочного образа обнаружен. Инициализация перепаковки..."
+          if [ -f "${{ env.BOOT_ARCHIVE_PATH }}" ]; then
+            echo "Архив донорского образа обнаружен. Запуск извлечения..."
             
-            cp ${{ env.BOOT_TEMPLATE_PATH }} boot.img
+            # Распаковываем архив прямо в текущую директорию (внутри архива файл должен называться boot.img)
+            unzip -q ${{ env.BOOT_ARCHIVE_PATH }} -d .
+            
             cp ${{ env.MAGISKBOOT_PATH }} magiskboot
             chmod +x magiskboot
             
+            # magiskboot читает распакованный boot.img
             ./magiskboot unpack boot.img
             cp ${{ env.ARTIFACT_RAW }} kernel
             ./magiskboot repack boot.img ${{ env.ARTIFACT_BOOT }}
           else
-            echo "Целевой шаблон ${{ env.BOOT_TEMPLATE_PATH }} не найден. Интеграция пропущена."
+            echo "Целевой архив ${{ env.BOOT_ARCHIVE_PATH }} не найден. Интеграция пропущена."
           fi
 
       - name: Upload Release Artifacts
