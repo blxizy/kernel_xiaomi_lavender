@@ -1,0 +1,83 @@
+name: Build Sirinarity Kernel
+
+on:
+  workflow_dispatch:
+
+env:
+  # === Настройки компиляции ===
+  KERNEL_ARCH: arm64
+  DEFCONFIG_FILE: "ТВОЙ_DEFCONFIG_ЗДЕСЬ"
+  OUT_DIR: out
+  
+  # === Целевое устройство ===
+  DEVICE_CODENAME: lavender
+  
+  # === Пути к исходным и промежуточным файлам ===
+  IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
+  
+  # === Имена выходных артефактов ===
+  ARTIFACT_RAW: Sirinarity-Raw.gz-dtb
+  ARTIFACT_AK3: Sirinarity-AK3.zip
+  ARTIFACT_BOOT: Sirinarity-boot.img
+  
+  # === Ресурсы для перепаковки (Format 3) ===
+  BOOT_TEMPLATE_PATH: .github/templates/boot.img
+  MAGISKBOOT_PATH: .github/tools/magiskboot
+  
+  # === Внешние репозитории ===
+  ANYKERNEL3_REPO: https://github.com/osm0sis/AnyKernel3.git
+
+jobs:
+  build_core:
+    name: Build Core
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Compile Kernel (Naked Base)
+        run: |
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} ${{ env.DEFCONFIG_FILE }}
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }}
+
+      - name: Package Format 1 (Raw Kernel)
+        run: |
+          cp ${{ env.IMAGE_PATH }} ${{ env.ARTIFACT_RAW }}
+
+      - name: Package Format 2 (AnyKernel3)
+        run: |
+          git clone --depth=1 ${{ env.ANYKERNEL3_REPO }} AK3
+          cp ${{ env.ARTIFACT_RAW }} AK3/Image.gz-dtb
+          
+          cd AK3
+          sed -i "s/maguro/${{ env.DEVICE_CODENAME }}/g" anykernel.sh
+          sed -i 's/block=.*boot/block=auto/g' anykernel.sh
+          sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel.sh
+          zip -r9 ../${{ env.ARTIFACT_AK3 }} *
+          cd ..
+
+      - name: Package Format 3 (Repack boot.img)
+        run: |
+          if [ -f "${{ env.BOOT_TEMPLATE_PATH }}" ]; then
+            echo "Шаблон загрузочного образа обнаружен. Инициализация перепаковки..."
+            
+            cp ${{ env.BOOT_TEMPLATE_PATH }} boot.img
+            cp ${{ env.MAGISKBOOT_PATH }} magiskboot
+            chmod +x magiskboot
+            
+            ./magiskboot unpack boot.img
+            cp ${{ env.ARTIFACT_RAW }} kernel
+            ./magiskboot repack boot.img ${{ env.ARTIFACT_BOOT }}
+          else
+            echo "Целевой шаблон ${{ env.BOOT_TEMPLATE_PATH }} не найден. Интеграция пропущена."
+          fi
+
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sirinarity-Release
+          path: |
+            ${{ env.ARTIFACT_RAW }}
+            ${{ env.ARTIFACT_AK3 }}
+            ${{ env.ARTIFACT_BOOT }}
