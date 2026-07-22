@@ -6,7 +6,7 @@ on:
 env:
   # === Настройки компиляции ===
   KERNEL_ARCH: arm64
-  DEFCONFIG_FILE: "ТВОЙ_DEFCONFIG_ЗДЕСЬ"
+  DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
   # === Целевое устройство ===
