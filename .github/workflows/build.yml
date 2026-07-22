@@ -9,9 +9,13 @@ env:
   DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
-  # === Кросс-компиляторы (Добавлено для решения ошибки vDSO) ===
-  COMPILER_64: aarch64-linux-gnu-
-  COMPILER_32: arm-linux-gnueabi-
+  # === Компилятор: Proton Clang (Pure LLVM) ===
+  CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
+  CLANG_DIR: toolchain
+  
+  # === Флаги хост-компилятора и LLVM ===
+  HOST_COMPILER_FLAGS: "-fcommon"
+  LLVM_FLAGS: "LLVM=1 LLVM_IAS=1"
   
   # === Целевое устройство ===
   DEVICE_CODENAME: lavender
@@ -40,16 +44,22 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Install Compiler Dependencies
+      - name: Download Clang Toolchain
         run: |
-          echo "Установка необходимых кросс-компиляторов..."
-          sudo apt-get update -y
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          echo "Инициализация Proton Clang..."
+          git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
 
-      - name: Compile Kernel (Naked Base)
+      - name: Compile Kernel (Pure LLVM)
         run: |
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} ${{ env.DEFCONFIG_FILE }}
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }}
+          echo "Интеграция Clang в системный путь..."
+          export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
+          
+          echo "Генерация конфигурации..."
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC=clang ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS=${{ env.HOST_COMPILER_FLAGS }}
+          
+          echo "Запуск компиляции Full LLVM..."
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC=clang ${{ env.LLVM_FLAGS }} HOSTCFLAGS=${{ env.HOST_COMPILER_FLAGS }}
+
       - name: Package Format 1 (Raw Kernel)
         run: |
           cp ${{ env.IMAGE_PATH }} ${{ env.ARTIFACT_RAW }}
