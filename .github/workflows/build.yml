@@ -6,7 +6,7 @@ on:
 env:
   # === Настройки компиляции ===
   KERNEL_ARCH: arm64
-  DEFCONFIG_FILE: "lavender-perf_defconfig"
+  DEFCONFIG_FILE: "curtana-perf_defconfig"
   OUT_DIR: out
   
   # === Компилятор: Proton Clang (Гибридная сборка) ===
@@ -24,7 +24,7 @@ env:
   LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
-  DEVICE_CODENAME: lavender
+  DEVICE_CODENAME: curtana
   
   # === Пути к исходным и промежуточным файлам ===
   IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
@@ -49,7 +49,6 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
-          repository: blxizy/kernel_xiaomi_lavender
           token: ${{ secrets.GITHUB_TOKEN }}
           clean: true
           fetch-depth: 1
@@ -118,11 +117,8 @@ jobs:
           if [ -f "${{ env.BOOT_ARCHIVE_PATH }}" ]; then
             unzip -q ${{ env.BOOT_ARCHIVE_PATH }} -d .
             
-            # Динамическая загрузка официального универсального magiskboot
-            MAGISK_URL=$(curl -sL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/topjohnwu/Magisk/releases/latest | grep "browser_download_url" | grep "Magisk-v" | cut -d '"' -f 4)
-            wget -qO magisk.apk "$MAGISK_URL"
-            unzip -j magisk.apk "lib/x86_64/libmagiskboot.so" -d .
-            mv libmagiskboot.so magiskboot
+            # Скачиваем нативный Linux x86_64 magiskboot
+            wget -qO magiskboot https://raw.githubusercontent.com/Uevo001/magiskboot-linux/main/x86_64/magiskboot
             chmod +x magiskboot
             
             ./magiskboot unpack boot.img
