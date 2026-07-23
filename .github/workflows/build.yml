@@ -19,7 +19,7 @@ env:
   
   # === Флаги хост-компилятора и LLVM ===
   HOST_COMPILER_FLAGS: "-fcommon"
-  LLVM_FLAGS: "LLVM=1 LLVM_IAS=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
+  LLVM_FLAGS: "LLVM=1 LLVM_IAS=1 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
   DEVICE_CODENAME: lavender
@@ -70,17 +70,14 @@ jobs:
           
           # Тотально удаляем блокировку встроенного ассемблера из всех сборочных скриптов
           find . -type f \( -name "Makefile" -o -name "*.mk" \) -exec sed -i 's/-no-integrated-as//g' {} +
-          
-          # Исправляем несовместимость линковщика LLD с легаси-флагом aarch64linux в vDSO
-          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
 
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu -fuse-ld=lld" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu -fuse-ld=lld" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
