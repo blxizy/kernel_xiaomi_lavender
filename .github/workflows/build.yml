@@ -118,7 +118,7 @@ jobs:
             unzip -q ${{ env.BOOT_ARCHIVE_PATH }} -d .
             
             # Динамическая загрузка статического универсального magiskboot (без AVX-зависимостей)
-            wget -qO magiskboot https://github.com/xiaolu/magiskboot_build/releases/latest/download/magiskboot_x86_64
+            wget -qO magiskboot https://github.com/Uevo001/magiskboot-linux/blob/main/x86_64/magiskboot
             chmod +x magiskboot
             
             ./magiskboot unpack boot.img
