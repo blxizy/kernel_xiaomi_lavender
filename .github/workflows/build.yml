@@ -13,11 +13,11 @@ env:
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы (Абсолютные пути к GNU GCC для обхода конфликтов) ===
-  COMPILER_64: /usr/bin/aarch64-linux-gnu-
-  COMPILER_32: /usr/bin/arm-linux-gnueabi-
+  # === Кросс-компиляторы ===
+  COMPILER_64: aarch64-linux-gnu-
+  COMPILER_32: arm-linux-gnueabi-
   
-  # === Флаги хост-компилятора и LLVM (IAS выключен для поддержки легаси) ===
+  # === Флаги хост-компилятора и LLVM ===
   HOST_COMPILER_FLAGS: "-fcommon"
   LLVM_FLAGS: "LLVM=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
   
@@ -47,11 +47,6 @@ jobs:
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
-        with:
-          repository: blxizy/kernel_xiaomi_lavender
-          token: ${{ secrets.GITHUB_TOKEN }}
-          clean: true
-          fetch-depth: 1
 
       - name: Install Base Dependencies
         run: |
