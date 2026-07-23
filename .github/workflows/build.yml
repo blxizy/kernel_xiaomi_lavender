@@ -50,22 +50,20 @@ jobs:
 
       - name: Install Base Dependencies
         run: |
-          echo "Установка GNU-утилит для связки с Clang..."
           sudo apt-get update -y
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Download Clang Toolchain
         run: |
-          echo "Инициализация Proton Clang..."
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
 
       - name: Compile Kernel (Hybrid Clang + GCC)
         run: |
-          echo "Генерация конфигурации..."
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin/clang" CLANG_TRIPLE=${{ env.CLANG_TRIPLE }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          echo "Запуск гибридной компиляции..."
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin/clang" CLANG_TRIPLE=${{ env.CLANG_TRIPLE }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC=clang CLANG_TRIPLE=${{ env.CLANG_TRIPLE }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC=clang CLANG_TRIPLE=${{ env.CLANG_TRIPLE }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
@@ -86,17 +84,12 @@ jobs:
       - name: Package Format 3 (Repack boot.img)
         run: |
           if [ -f "${{ env.BOOT_ARCHIVE_PATH }}" ]; then
-            echo "Архив донорского образа обнаружен. Запуск извлечения..."
             unzip -q ${{ env.BOOT_ARCHIVE_PATH }} -d .
-            
             cp ${{ env.MAGISKBOOT_PATH }} magiskboot
             chmod +x magiskboot
-            
             ./magiskboot unpack boot.img
             cp ${{ env.ARTIFACT_RAW }} kernel
             ./magiskboot repack boot.img ${{ env.ARTIFACT_BOOT }}
-          else
-            echo "Целевой архив ${{ env.BOOT_ARCHIVE_PATH }} не найден. Интеграция пропущена."
           fi
 
       - name: Upload Release Artifacts
