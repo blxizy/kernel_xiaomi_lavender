@@ -13,8 +13,7 @@ env:
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы и связки ===
-  CLANG_TRIPLE: aarch64-linux-gnu-
+  # === Кросс-компиляторы (GCC Fallback для ассемблера и линковки) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
@@ -61,9 +60,9 @@ jobs:
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC=clang CLANG_TRIPLE=${{ env.CLANG_TRIPLE }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC=clang CLANG_TRIPLE=${{ env.CLANG_TRIPLE }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
