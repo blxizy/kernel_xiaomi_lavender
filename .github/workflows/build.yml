@@ -6,7 +6,6 @@ on:
 env:
   # === Настройки компиляции ===
   KERNEL_ARCH: arm64
-  # Возвращаем правильный конфиг для Redmi Note 7
   DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
@@ -14,7 +13,7 @@ env:
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы (System GNU GCC для ассемблера и линковки) ===
+  # === Кросс-компиляторы (System GNU GCC для ассемблера, линковки и objcopy) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
@@ -22,11 +21,10 @@ env:
   HOST_COMPILER_FLAGS: "-fcommon"
   
   # === Флаги LLVM ===
-  # Убраны LD=ld.lld и HOSTLD=ld.lld. Теперь линковкой будет заниматься стабильный GNU ld.
-  LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTAR=llvm-ar"
+  # Убраны LLVM-версии OBJCOPY, OBJDUMP и STRIP для совместимости с GNU ld
+  LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
-  # Исправлено на правильный кодовый нейм
   DEVICE_CODENAME: lavender
   
   # === Пути к исходным и промежуточным файлам ===
@@ -74,8 +72,6 @@ jobs:
 
       - name: Create Clang Wrapper
         run: |
-          # Враппер добавляет -Wno-asm-operand-widths для устранения спама в логах
-          # и -Qunused-arguments для предотвращения ложных ошибок в тестах Kbuild
           cat << 'EOF' > ${{ env.CLANG_DIR }}/bin/clang-wrapper
           #!/bin/bash
           if [[ "$*" == *"-mfloat-abi="* ]] || [[ "$*" == *"-m32"* ]] || [[ "$*" == *"-marm"* ]]; then
@@ -85,6 +81,17 @@ jobs:
           fi
           EOF
           chmod +x ${{ env.CLANG_DIR }}/bin/clang-wrapper
+
+      - name: Patch Kernel Makefiles
+        run: |
+          # Исправляем несовместимость линковщика LLD с легаси-флагами эмуляции
+          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
+          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/Makefile || true
+          
+          # КРИТИЧЕСКИЙ ПАТЧ: Вырезаем принудительное отключение встроенного ассемблера для vDSO32
+          if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
+              sed -i 's/-no-integrated-as//g' arch/arm64/kernel/vdso32/Makefile
+          fi
 
       - name: Compile Kernel
         run: |
