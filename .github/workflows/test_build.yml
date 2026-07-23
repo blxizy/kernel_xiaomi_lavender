@@ -61,14 +61,7 @@ jobs:
           EOF
           chmod +x ${{ env.CLANG_DIR }}/bin/clang-wrapper
 
-      - name: Patch Kernel Makefiles
-        # ВНИМАНИЕ: Сделай эти правки в исходниках (git commit), а затем удали этот шаг!
-        run: |
-          
-          if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
-              sed -i 's/-no-integrated-as//g' arch/arm64/kernel/vdso32/Makefile
-          fi
-
+  
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
