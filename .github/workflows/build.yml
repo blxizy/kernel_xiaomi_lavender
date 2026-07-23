@@ -13,11 +13,11 @@ env:
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы (System GNU GCC для ассемблера и vDSO) ===
+  # === Кросс-компиляторы (System GNU GCC) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
-  # === Флаги хост-компилятора (LLVM_IAS удален для поддержки легаси-макросов) ===
+  # === Флаги хост-компилятора и LLVM ===
   HOST_COMPILER_FLAGS: "-fcommon"
   LLVM_FLAGS: "LLVM=1 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
   
@@ -61,6 +61,12 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
+          
+          # КРИТИЧНО: Удаляем встроенные симлинки LLVM, чтобы исключить конфликты с ассемблером
+          rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
+          rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
+          rm -f ${{ env.CLANG_DIR }}/bin/as
+          rm -f ${{ env.CLANG_DIR }}/bin/ld
 
       - name: Patch Kernel Makefiles
         run: |
@@ -77,10 +83,10 @@ jobs:
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          # В переменной CC жестко задаем таргет aarch64, чтобы Clang вызывал правильный GNU-ассемблер
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          # ПАРАМЕТР CC: Добавляем -B /usr/bin/aarch64-linux-gnu- чтобы Clang нашел правильный системный GNU AS
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu -B /usr/bin/aarch64-linux-gnu-" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu -B /usr/bin/aarch64-linux-gnu-" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
