@@ -13,11 +13,11 @@ env:
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы (System GNU GCC) ===
+  # === Кросс-компиляторы (System GNU GCC для ассемблера и vDSO) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
-  # === Флаги хост-компилятора и LLVM (Без LLVM_IAS для поддержки легаси) ===
+  # === Флаги хост-компилятора (LLVM_IAS удален для поддержки легаси-макросов) ===
   HOST_COMPILER_FLAGS: "-fcommon"
   LLVM_FLAGS: "LLVM=1 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
   
@@ -61,26 +61,26 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
-          # Удаляем встроенные симлинки LLVM, чтобы исключить конфликты с ассемблером
-          rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
-          rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
-          rm -f ${{ env.CLANG_DIR }}/bin/as
-          rm -f ${{ env.CLANG_DIR }}/bin/ld
 
-      - name: Patch Kernel Makefile
+      - name: Patch Kernel Makefiles
         run: |
-          # Исправляем несовместимость линковщика LLD с легаси-флагами в vDSO
+          # 1. Исправляем несовместимость линковщика LLD с легаси-флагом aarch64linux в 64-битном vDSO
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
-          [ -f arch/arm64/kernel/vdso32/Makefile ] && sed -i 's/armelf_linux_eabi/armelf/g' arch/arm64/kernel/vdso32/Makefile || true
+          
+          # 2. Форсируем использование GNU GCC для 32-битного vDSO32, чтобы обойти баг Clang с -mfloat-abi=soft
+          if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
+              sed -i 's/CC32 := $(CC).*/CC32 := $(CROSS_COMPILE_ARM32)gcc/g' arch/arm64/kernel/vdso32/Makefile
+              sed -i 's/LD32 := $(CC).*/LD32 := $(CROSS_COMPILE_ARM32)ld/g' arch/arm64/kernel/vdso32/Makefile
+          fi
 
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          # Используем переменные CLANG_TRIPLE, чтобы ядро само переключало таргеты между 64-bit и 32-bit (vDSO)
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang" CLANG_TRIPLE=${{ env.COMPILER_64 }} CLANG_TRIPLE_ARM32=${{ env.COMPILER_32 }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          # В переменной CC жестко задаем таргет aarch64, чтобы Clang вызывал правильный GNU-ассемблер
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang" CLANG_TRIPLE=${{ env.COMPILER_64 }} CLANG_TRIPLE_ARM32=${{ env.COMPILER_32 }} CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
