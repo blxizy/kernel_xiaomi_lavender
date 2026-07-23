@@ -13,14 +13,12 @@ env:
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы (System GNU GCC для ассемблера и линковки) ===
+  # === Кросс-компиляторы (System GNU GCC для ассемблера) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
-  # === Флаги хост-компилятора ===
+  # === Флаги хост-компилятора и LLVM (Без LLVM_IAS для поддержки легаси-макросов) ===
   HOST_COMPILER_FLAGS: "-fcommon"
-  
-  # === Флаги LLVM (LLVM_IAS глобально выключен для совместимости с легаси) ===
   LLVM_FLAGS: "LLVM=1 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
@@ -63,7 +61,7 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
-          # Удаляем встроенные симлинки LLVM, чтобы исключить конфликты с ассемблером
+          # КРИТИЧНО: Удаляем встроенные симлинки LLVM, чтобы исключить конфликты с ассемблером
           rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
           rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
           rm -f ${{ env.CLANG_DIR }}/bin/as
@@ -74,20 +72,22 @@ jobs:
           # 1. Исправляем несовместимость линковщика LLD с легаси-флагом aarch64linux в 64-битном vDSO
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
           
-          # 2. Изолируем 32-битный vDSO32: заставляем его собираться через встроенный LLVM IAS, 
-          # чтобы обойти баг внешней GNU утилиты с флагом -mfloat-abi=soft
+          # 2. Форсируем использование GNU GCC для 32-битного vDSO32, чтобы обойти баг Clang с -mfloat-abi=soft
           if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
-              sed -i 's/-mfloat-abi=soft/-mfloat-abi=soft -fintegrated-as/g' arch/arm64/kernel/vdso32/Makefile
+              sed -i 's/CC32 := $(CC).*/CC32 := $(CROSS_COMPILE_ARM32)gcc/g' arch/arm64/kernel/vdso32/Makefile
+              sed -i 's/LD32 := $(CC).*/LD32 := $(CROSS_COMPILE_ARM32)ld/g' arch/arm64/kernel/vdso32/Makefile
           fi
+          
+          # 3. Разрешаем Clang использовать встроенный ассемблер для C-файлов, чтобы он не обращался к системному /usr/bin/as
+          find . -type f \( -name "Makefile" -o -name "*.mk" \) -exec sed -i 's/-no-integrated-as//g' {} +
 
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          # CC включает флаг --gcc-toolchain=/usr для корректного нахождения системного кросс-ассемблера
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --gcc-toolchain=/usr" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --gcc-toolchain=/usr" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
