@@ -117,8 +117,8 @@ jobs:
           if [ -f "${{ env.BOOT_ARCHIVE_PATH }}" ]; then
             unzip -q ${{ env.BOOT_ARCHIVE_PATH }} -d .
             
-            # Скачиваем нативный Linux x86_64 magiskboot
-            wget -qO magiskboot https://raw.githubusercontent.com/Uevo001/magiskboot-linux/main/x86_64/magiskboot
+            # Динамическая загрузка статического универсального magiskboot (без AVX-зависимостей)
+            wget -qO magiskboot https://github.com/xiaolu/magiskboot_build/releases/latest/download/magiskboot_x86_64
             chmod +x magiskboot
             
             ./magiskboot unpack boot.img
