@@ -55,14 +55,19 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
+          # Уничтожаем симлинки Proton Clang, конфликтующие с легаси-ядром
+          rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
+          rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
+          rm -f ${{ env.CLANG_DIR }}/bin/as
+          rm -f ${{ env.CLANG_DIR }}/bin/ld
 
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --prefix=aarch64-linux-gnu-" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang -target aarch64-linux-gnu -fintegrated-as" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --prefix=aarch64-linux-gnu-" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang -target aarch64-linux-gnu -fintegrated-as" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
