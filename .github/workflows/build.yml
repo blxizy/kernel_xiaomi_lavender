@@ -13,7 +13,7 @@ env:
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы (System GNU GCC для ассемблера и линковки) ===
+  # === Кросс-компиляторы (System GNU GCC) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
@@ -60,20 +60,27 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
-          # Уничтожаем фейковые симлинки Proton Clang, чтобы заставить ядро использовать оригинальный системный GNU AS и LD
+          # Удаляем встроенные симлинки LLVM, чтобы исключить любые конфликты
           rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
           rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
           rm -f ${{ env.CLANG_DIR }}/bin/as
           rm -f ${{ env.CLANG_DIR }}/bin/ld
 
+      - name: Configure GNU Cross-Assembler
+        run: |
+          # Создаем директорию с правильными GNU-утилитами для перенаправления Clang
+          mkdir -p $GITHUB_WORKSPACE/cross_bin
+          ln -s /usr/bin/aarch64-linux-gnu-as $GITHUB_WORKSPACE/cross_bin/as
+          ln -s /usr/bin/aarch64-linux-gnu-ld $GITHUB_WORKSPACE/cross_bin/ld
+
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          # CC включает --gcc-toolchain=/usr для корректного поиска кросс-ассемблера aarch64-linux-gnu-as
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --gcc-toolchain=/usr" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          # CC включает флаг -B для жесткого перенаправления Clang на GNU AS
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu -B $GITHUB_WORKSPACE/cross_bin" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCC=clang HOSTCXX=clang++ ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --gcc-toolchain=/usr" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu -B $GITHUB_WORKSPACE/cross_bin" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCC=clang HOSTCXX=clang++ HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
