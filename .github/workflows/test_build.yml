@@ -1,0 +1,106 @@
+name: Refactored Kernel Build Test
+
+on:
+  workflow_dispatch:
+
+env:
+  KERNEL_ARCH: arm64
+  DEVICE_CODENAME: lavender
+  DEFCONFIG_FILE: "lavender-perf_defconfig"
+  OUT_DIR: out
+  
+  # Компилятор
+  CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
+  CLANG_DIR: toolchain
+  
+  # GNU Кросс-компиляторы для линковки
+  COMPILER_64: aarch64-linux-gnu-
+  COMPILER_32: arm-linux-gnueabi-
+  
+  # Чистые флаги LLVM (без принудительного AR и NM, доверяем системе)
+  LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++"
+  
+  # Пути
+  IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
+  ARTIFACT_AK3: Sirinarity-AK3.zip
+  ANYKERNEL3_REPO: https://github.com/osm0sis/AnyKernel3.git
+
+jobs:
+  build_core:
+    name: Build & Package
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update -y
+          # Убрали jq, оставили только нужные GNU инструменты
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
+      - name: Setup Proton Clang
+        run: |
+          git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
+          # Больше не удаляем файлы тулчейна (rm -f). Мы контролируем процесс через clang-wrapper.
+
+      - name: Configure Clang Wrapper
+        run: |
+          cat << 'EOF' > ${{ env.CLANG_DIR }}/bin/clang-wrapper
+          #!/bin/bash
+          # Этот скрипт заставляет Clang игнорировать старый синтаксис ассемблера и использовать GNU BFD
+          if [[ "$*" == *"-mfloat-abi="* ]] || [[ "$*" == *"-m32"* ]] || [[ "$*" == *"-marm"* ]]; then
+              exec clang --target=arm-linux-gnueabi -B /usr/bin/arm-linux-gnueabi- -fintegrated-as -Qunused-arguments -Wno-asm-operand-widths "$@"
+          else
+              exec clang --target=aarch64-linux-gnu -B /usr/bin/aarch64-linux-gnu- -Qunused-arguments -Wno-asm-operand-widths "$@"
+          fi
+          EOF
+          chmod +x ${{ env.CLANG_DIR }}/bin/clang-wrapper
+
+      - name: [TODO] Patch Kernel Makefiles
+        # ВНИМАНИЕ: Сделай эти правки в исходниках (git commit), а затем удали этот шаг!
+        run: |
+          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
+          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/Makefile || true
+          if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
+              sed -i 's/-no-integrated-as//g' arch/arm64/kernel/vdso32/Makefile
+          fi
+
+      - name: Compile Kernel
+        run: |
+          export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
+          # Используем переменные для гибкости. LD и OBJCOPY подтянутся из системы.
+          
+          # 1. Генерируем .config
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="-fcommon"
+          
+          # 2. Собираем ядро
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="-fcommon"
+
+      - name: Package AnyKernel3
+        run: |
+          git clone --depth=1 ${{ env.ANYKERNEL3_REPO }} AK3
+          cp ${{ env.IMAGE_PATH }} AK3/Image.gz-dtb
+          
+          cd AK3
+          sed -i "s/maguro/${{ env.DEVICE_CODENAME }}/g" anykernel.sh
+          sed -i 's/block=.*boot/block=auto/g' anykernel.sh
+          sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel.sh
+          zip -r9 ../${{ env.ARTIFACT_AK3 }} *
+          cd ..
+
+      - name: Upload Raw Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Image.gz-dtb
+          path: ${{ env.IMAGE_PATH }}
+
+      - name: Upload AnyKernel3 Zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sirinarity-AK3
+          path: ${{ env.ARTIFACT_AK3 }}
