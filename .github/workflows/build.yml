@@ -9,17 +9,17 @@ env:
   DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
-  # === Компилятор: Proton Clang (Гибридная сборка) ===
+  # === Компилятор: Proton Clang (Full LLVM) ===
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы ===
+  # === Кросс-компиляторы (Оставлены как fallback) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
   # === Флаги хост-компилятора и LLVM ===
   HOST_COMPILER_FLAGS: "-fcommon"
-  LLVM_FLAGS: "LLVM=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
+  LLVM_FLAGS: "LLVM=1 LLVM_IAS=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
   DEVICE_CODENAME: lavender
@@ -47,6 +47,11 @@ jobs:
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
+        with:
+          repository: blxizy/kernel_xiaomi_lavender
+          token: ${{ secrets.GITHUB_TOKEN }}
+          clean: true
+          fetch-depth: 1
 
       - name: Install Base Dependencies
         run: |
@@ -56,6 +61,15 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
+
+      - name: Patch Kernel Makefile for LLVM
+        run: |
+          # Вырезаем легаси-флаги эндианности, несовместимые с LLVM IAS
+          sed -i '/AS.*+= -E[LB]/d' arch/arm64/Makefile
+          sed -i '/LD.*+= -E[LB]/d' arch/arm64/Makefile
+          
+          # Тотально удаляем блокировку встроенного ассемблера из всех сборочных скриптов
+          find . -type f \( -name "Makefile" -o -name "*.mk" \) -exec sed -i 's/-no-integrated-as//g' {} +
 
       - name: Compile Kernel
         run: |
