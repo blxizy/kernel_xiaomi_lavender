@@ -21,10 +21,11 @@ env:
   HOST_COMPILER_FLAGS: "-fcommon"
   
   # === Флаги LLVM ===
-  LLVM_FLAGS: "LLVM=1 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
+  # Добавлен LLVM_IAS=0 для отключения встроенного ассемблера
+  LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
-  DEVICE_CODENAME: lavender
+  DEVICE_CODENAME: curtana
   
   # === Пути к исходным и промежуточным файлам ===
   IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
@@ -95,7 +96,6 @@ jobs:
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          # CC использует наш враппер. Флаг -no-integrated-as остается в Makefile ядра нетронутым!
           make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
           make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
