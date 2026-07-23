@@ -6,7 +6,7 @@ on:
 env:
   # === Настройки компиляции ===
   KERNEL_ARCH: arm64
-  DEFCONFIG_FILE: "curtana-perf_defconfig"
+  DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
   # === Компилятор: Proton Clang (Гибридная сборка) ===
@@ -24,7 +24,7 @@ env:
   LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
-  DEVICE_CODENAME: curtana
+  DEVICE_CODENAME: lavender
   
   # === Пути к исходным и промежуточным файлам ===
   IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
