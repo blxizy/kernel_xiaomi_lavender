@@ -9,16 +9,17 @@ env:
   DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
-  # === Компилятор: Proton Clang (Гибридная сборка) ===
+  # === Компилятор: Proton Clang (Full LLVM) ===
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы (GNU GCC для ассемблера и линковки) ===
+  # === Кросс-компиляторы (Оставлены для vDSO совместимости) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
-  # === Флаги хост-компилятора ===
+  # === Флаги хост-компилятора и LLVM ===
   HOST_COMPILER_FLAGS: "-fcommon"
+  LLVM_FLAGS: "LLVM=1 LLVM_IAS=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
   DEVICE_CODENAME: lavender
@@ -46,6 +47,11 @@ jobs:
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
+        with:
+          repository: blxizy/kernel_xiaomi_lavender
+          token: ${{ secrets.GITHUB_TOKEN }}
+          clean: true
+          fetch-depth: 1
 
       - name: Install Base Dependencies
         run: |
@@ -55,19 +61,20 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
-          # Уничтожаем симлинки Proton Clang, конфликтующие с легаси-ядром
-          rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
-          rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
-          rm -f ${{ env.CLANG_DIR }}/bin/as
-          rm -f ${{ env.CLANG_DIR }}/bin/ld
+
+      - name: Patch Kernel Makefile for LLVM
+        run: |
+          # Удаляем хардкодные GCC-флаги эндианности, которые ломают LLVM IAS
+          sed -i '/AS.*+= -E[LB]/d' arch/arm64/Makefile
+          sed -i '/LD.*+= -E[LB]/d' arch/arm64/Makefile
 
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang -target aarch64-linux-gnu -fintegrated-as" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang -target aarch64-linux-gnu -fintegrated-as" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
