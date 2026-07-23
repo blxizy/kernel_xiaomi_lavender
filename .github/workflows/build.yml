@@ -47,11 +47,6 @@ jobs:
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
-        with:
-          repository: blxizy/kernel_xiaomi_lavender
-          token: ${{ secrets.GITHUB_TOKEN }}
-          clean: true
-          fetch-depth: 1
 
       - name: Install Base Dependencies
         run: |
@@ -64,7 +59,7 @@ jobs:
 
       - name: Patch Kernel Makefile for LLVM
         run: |
-          # Удаляем хардкодные GCC-флаги эндианности, которые ломают LLVM IAS
+          # Вырезаем легаси-флаги эндианности, из-за которых падает LLVM IAS и системный ассемблер
           sed -i '/AS.*+= -E[LB]/d' arch/arm64/Makefile
           sed -i '/LD.*+= -E[LB]/d' arch/arm64/Makefile
 
