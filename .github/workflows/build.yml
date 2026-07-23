@@ -21,7 +21,6 @@ env:
   HOST_COMPILER_FLAGS: "-fcommon"
   
   # === Флаги LLVM ===
-  # Добавлен LLVM_IAS=0 для отключения встроенного ассемблера
   LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
@@ -72,11 +71,11 @@ jobs:
 
       - name: Create Clang Wrapper
         run: |
-          # Создаем умный враппер, который динамически меняет target и пути к системному ассемблеру
+          # Создаем умный враппер. Добавляем -fintegrated-as для 32-битного кода, чтобы обойти ошибку -mfloat-abi=soft.
           cat << 'EOF' > ${{ env.CLANG_DIR }}/bin/clang-wrapper
           #!/bin/bash
           if [[ "$*" == *"-mfloat-abi="* ]] || [[ "$*" == *"-m32"* ]] || [[ "$*" == *"-marm"* ]]; then
-              exec clang --target=arm-linux-gnueabi -B /usr/bin/arm-linux-gnueabi- -fuse-ld=lld "$@"
+              exec clang --target=arm-linux-gnueabi -B /usr/bin/arm-linux-gnueabi- -fuse-ld=lld -fintegrated-as "$@"
           else
               exec clang --target=aarch64-linux-gnu -B /usr/bin/aarch64-linux-gnu- -fuse-ld=lld "$@"
           fi
@@ -88,9 +87,6 @@ jobs:
           # Исправляем несовместимость линковщика LLD с легаси-флагами эмуляции для vDSO
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/Makefile || true
-          if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
-              sed -i 's/armelf_linux_eabi/armelf/g' arch/arm64/kernel/vdso32/Makefile || true
-          fi
 
       - name: Compile Kernel
         run: |
