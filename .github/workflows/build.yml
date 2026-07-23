@@ -24,7 +24,7 @@ env:
   LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
-  DEVICE_CODENAME: curtana
+  DEVICE_CODENAME: lavender
   
   # === Пути к исходным и промежуточным файлам ===
   IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
@@ -63,7 +63,7 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
-          # КРИТИЧНО: Удаляем встроенные симлинки LLVM, чтобы исключить конфликты с системным ассемблером
+          # Удаляем встроенные симлинки LLVM
           rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
           rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
           rm -f ${{ env.CLANG_DIR }}/bin/as
@@ -71,22 +71,28 @@ jobs:
 
       - name: Create Clang Wrapper
         run: |
-          # Создаем умный враппер. Добавляем -fintegrated-as для 32-битного кода, чтобы обойти ошибку -mfloat-abi=soft.
+          # Враппер глушит спам лога (-Wno-asm-operand-widths) 
+          # и спасает проверки Kbuild от ложных срабатываний (-Qunused-arguments)
           cat << 'EOF' > ${{ env.CLANG_DIR }}/bin/clang-wrapper
           #!/bin/bash
           if [[ "$*" == *"-mfloat-abi="* ]] || [[ "$*" == *"-m32"* ]] || [[ "$*" == *"-marm"* ]]; then
-              exec clang --target=arm-linux-gnueabi -B /usr/bin/arm-linux-gnueabi- -fuse-ld=lld -fintegrated-as "$@"
+              exec clang --target=arm-linux-gnueabi -B /usr/bin/arm-linux-gnueabi- -fuse-ld=lld -Qunused-arguments -Wno-asm-operand-widths "$@"
           else
-              exec clang --target=aarch64-linux-gnu -B /usr/bin/aarch64-linux-gnu- -fuse-ld=lld "$@"
+              exec clang --target=aarch64-linux-gnu -B /usr/bin/aarch64-linux-gnu- -fuse-ld=lld -Qunused-arguments -Wno-asm-operand-widths "$@"
           fi
           EOF
           chmod +x ${{ env.CLANG_DIR }}/bin/clang-wrapper
 
       - name: Patch Kernel Makefiles
         run: |
-          # Исправляем несовместимость линковщика LLD с легаси-флагами эмуляции для vDSO
+          # Исправляем несовместимость линковщика LLD с легаси-флагами эмуляции
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/Makefile || true
+          
+          # КРИТИЧЕСКИЙ ПАТЧ: Вырезаем принудительное отключение встроенного ассемблера для vDSO32
+          if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
+              sed -i 's/-no-integrated-as//g' arch/arm64/kernel/vdso32/Makefile
+          fi
 
       - name: Compile Kernel
         run: |
