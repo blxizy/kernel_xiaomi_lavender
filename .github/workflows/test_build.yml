@@ -65,7 +65,7 @@ jobs:
         # ВНИМАНИЕ: Сделай эти правки в исходниках (git commit), а затем удали этот шаг!
         run: |
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
-          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/Makefile || true
+          # sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/Makefile || true
           if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
               sed -i 's/-no-integrated-as//g' arch/arm64/kernel/vdso32/Makefile
           fi
