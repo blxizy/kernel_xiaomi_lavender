@@ -19,7 +19,7 @@ env:
   
   # === Флаги хост-компилятора и LLVM ===
   HOST_COMPILER_FLAGS: "-fcommon"
-  LLVM_FLAGS: "LLVM=1 LLVM_IAS=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
+  LLVM_FLAGS: "CC=clang LLVM=1 LLVM_IAS=1 HOSTCC=clang HOSTCXX=clang++ HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
   DEVICE_CODENAME: lavender
