@@ -127,11 +127,21 @@ jobs:
             ./magiskboot repack boot.img ${{ env.ARTIFACT_BOOT }}
           fi
 
-      - name: Upload Release Artifacts
+      - name: Upload Raw Kernel
         uses: actions/upload-artifact@v4
         with:
-          name: Sirinarity-Release
-          path: |
-            ${{ env.ARTIFACT_RAW }}
-            ${{ env.ARTIFACT_AK3 }}
-            # ${{ env.ARTIFACT_BOOT }} # Файл временно исключен из загрузки
+          name: Sirinarity-Raw
+          path: ${{ env.ARTIFACT_RAW }}
+
+      - name: Upload AnyKernel3
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sirinarity-AK3
+          path: ${{ env.ARTIFACT_AK3 }}
+
+      # - name: Upload Boot Image
+      #   uses: actions/upload-artifact@v4
+      #   if: false # [ЗАМОРОЖЕНО] Шаг временно отключен
+      #   with:
+      #     name: Sirinarity-Boot
+      #     path: ${{ env.ARTIFACT_BOOT }}
