@@ -9,17 +9,16 @@ env:
   DEFCONFIG_FILE: "lavender-perf_defconfig"
   OUT_DIR: out
   
-  # === Компилятор: Proton Clang ===
+  # === Компилятор: Proton Clang (Гибридная сборка) ===
   CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
   
-  # === Кросс-компиляторы ===
+  # === Кросс-компиляторы (System GNU GCC для ассемблера и линковки) ===
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
-  # === Флаги хост-компилятора и LLVM ===
+  # === Флаги хост-компилятора ===
   HOST_COMPILER_FLAGS: "-fcommon"
-  LLVM_FLAGS: "LLVM=1 HOSTCC=clang HOSTCXX=clang++ LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTLD=ld.lld HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
   DEVICE_CODENAME: lavender
@@ -61,26 +60,20 @@ jobs:
       - name: Download Clang Toolchain
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
-          # Удаляем конфликтующие бинарники из тулчейна, чтобы форсировать использование системного GNU AS
+          # Уничтожаем фейковые симлинки Proton Clang, чтобы заставить ядро использовать оригинальный системный GNU AS и LD
           rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
           rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
           rm -f ${{ env.CLANG_DIR }}/bin/as
           rm -f ${{ env.CLANG_DIR }}/bin/ld
 
-      - name: Patch Kernel VDSO
-        run: |
-          # Исправляем несовместимость линковщика LLD с легаси-флагом aarch64linux
-          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
-          [ -f arch/arm64/kernel/vdso32/Makefile ] && sed -i 's/armelf_linux_eabi/armelf/g' arch/arm64/kernel/vdso32/Makefile || true
-
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          # CC включает --prefix для корректного поиска кросс-ассемблера aarch64-linux-gnu-as
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --prefix=aarch64-linux-gnu-" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          # CC включает --gcc-toolchain=/usr для корректного поиска кросс-ассемблера aarch64-linux-gnu-as
+          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --gcc-toolchain=/usr" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --prefix=aarch64-linux-gnu-" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang --target=aarch64-linux-gnu --gcc-toolchain=/usr" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
       - name: Package Format 1 (Raw Kernel)
         run: |
