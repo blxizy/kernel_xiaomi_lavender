@@ -21,7 +21,6 @@ env:
   HOST_COMPILER_FLAGS: "-fcommon"
   
   # === Флаги LLVM ===
-  # Убраны LLVM-версии OBJCOPY, OBJDUMP и STRIP для совместимости с GNU ld
   LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar"
   
   # === Целевое устройство ===
@@ -37,7 +36,6 @@ env:
   
   # === Ресурсы для перепаковки (Format 3) ===
   BOOT_ARCHIVE_PATH: .github/templates/boot.zip
-  MAGISKBOOT_PATH: .github/tools/magiskboot
   
   # === Внешние репозитории ===
   ANYKERNEL3_REPO: https://github.com/osm0sis/AnyKernel3.git
@@ -59,7 +57,7 @@ jobs:
       - name: Install Base Dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi jq
 
       - name: Download Clang Toolchain
         run: |
@@ -84,11 +82,9 @@ jobs:
 
       - name: Patch Kernel Makefiles
         run: |
-          # Исправляем несовместимость линковщика LLD с легаси-флагами эмуляции
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
           sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/Makefile || true
           
-          # КРИТИЧЕСКИЙ ПАТЧ: Вырезаем принудительное отключение встроенного ассемблера для vDSO32
           if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
               sed -i 's/-no-integrated-as//g' arch/arm64/kernel/vdso32/Makefile
           fi
@@ -121,8 +117,14 @@ jobs:
         run: |
           if [ -f "${{ env.BOOT_ARCHIVE_PATH }}" ]; then
             unzip -q ${{ env.BOOT_ARCHIVE_PATH }} -d .
-            cp ${{ env.MAGISKBOOT_PATH }} magiskboot
+            
+            # Динамическая загрузка официального универсального magiskboot
+            MAGISK_URL=$(curl -sL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/topjohnwu/Magisk/releases/latest | grep "browser_download_url" | grep "Magisk-v" | cut -d '"' -f 4)
+            wget -qO magisk.apk "$MAGISK_URL"
+            unzip -j magisk.apk "lib/x86_64/libmagiskboot.so" -d .
+            mv libmagiskboot.so magiskboot
             chmod +x magiskboot
+            
             ./magiskboot unpack boot.img
             cp ${{ env.ARTIFACT_RAW }} kernel
             ./magiskboot repack boot.img ${{ env.ARTIFACT_BOOT }}
