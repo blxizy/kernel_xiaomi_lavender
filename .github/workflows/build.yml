@@ -30,7 +30,6 @@ env:
   IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
   
   # === Имена выходных артефактов ===
-  ARTIFACT_RAW: Sirinarity-Raw.gz-dtb
   ARTIFACT_AK3: Sirinarity-AK3.zip
   ARTIFACT_BOOT: Sirinarity-boot.img
   
@@ -96,14 +95,10 @@ jobs:
           
           make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
 
-      - name: Package Format 1 (Raw Kernel)
-        run: |
-          cp ${{ env.IMAGE_PATH }} ${{ env.ARTIFACT_RAW }}
-
       - name: Package Format 2 (AnyKernel3)
         run: |
           git clone --depth=1 ${{ env.ANYKERNEL3_REPO }} AK3
-          cp ${{ env.ARTIFACT_RAW }} AK3/Image.gz-dtb
+          cp ${{ env.IMAGE_PATH }} AK3/Image.gz-dtb
           
           cd AK3
           sed -i "s/maguro/${{ env.DEVICE_CODENAME }}/g" anykernel.sh
@@ -123,15 +118,15 @@ jobs:
             chmod +x magiskboot
             
             ./magiskboot unpack boot.img
-            cp ${{ env.ARTIFACT_RAW }} kernel
+            cp ${{ env.IMAGE_PATH }} kernel
             ./magiskboot repack boot.img ${{ env.ARTIFACT_BOOT }}
           fi
 
       - name: Upload Raw Kernel
         uses: actions/upload-artifact@v4
         with:
-          name: Sirinarity-Raw
-          path: ${{ env.ARTIFACT_RAW }}
+          name: Image.gz-dtb
+          path: ${{ env.IMAGE_PATH }}
 
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
