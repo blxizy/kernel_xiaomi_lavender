@@ -17,10 +17,7 @@ env:
   COMPILER_64: aarch64-linux-gnu-
   COMPILER_32: arm-linux-gnueabi-
   
-  # Чистые флаги LLVM (без принудительного AR и NM, доверяем системе)
-  LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++"
-  
-  # Пути
+  # Пути и репозитории
   IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
   ARTIFACT_AK3: Sirinarity-AK3.zip
   ANYKERNEL3_REPO: https://github.com/osm0sis/AnyKernel3.git
@@ -40,19 +37,16 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update -y
-          # Убрали jq, оставили только нужные GNU инструменты
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Setup Proton Clang
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
-          # Больше не удаляем файлы тулчейна (rm -f). Мы контролируем процесс через clang-wrapper.
 
       - name: Configure Clang Wrapper
         run: |
           cat << 'EOF' > ${{ env.CLANG_DIR }}/bin/clang-wrapper
           #!/bin/bash
-          # Этот скрипт заставляет Clang игнорировать старый синтаксис ассемблера и использовать GNU BFD
           if [[ "$*" == *"-mfloat-abi="* ]] || [[ "$*" == *"-m32"* ]] || [[ "$*" == *"-marm"* ]]; then
               exec clang --target=arm-linux-gnueabi -B /usr/bin/arm-linux-gnueabi- -fintegrated-as -Qunused-arguments -Wno-asm-operand-widths "$@"
           else
@@ -61,17 +55,22 @@ jobs:
           EOF
           chmod +x ${{ env.CLANG_DIR }}/bin/clang-wrapper
 
-  
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
-          # Используем переменные для гибкости. LD и OBJCOPY подтянутся из системы.
           
-          # 1. Генерируем .config
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="-fcommon"
+          # 1. Генерируем конфигурацию (тихий режим)
+          make -s -O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
+            CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
+            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
+            HOSTCFLAGS="-fcommon" \
+            ${{ env.DEFCONFIG_FILE }}
           
-          # 2. Собираем ядро
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="-fcommon"
+          # 2. Основная сборка
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
+            CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
+            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
+            HOSTCFLAGS="-fcommon"
 
       - name: Package AnyKernel3
         run: |
