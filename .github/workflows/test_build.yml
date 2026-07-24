@@ -1,97 +1,100 @@
-name: Refactored Kernel Build Test
+name: Sirinarity Kernel Release Build
 
 on:
   workflow_dispatch:
 
 env:
-  KERNEL_ARCH: arm64
+  # Основные параметры
+  ARCH: arm64
+  DEFCONFIG: lavender-perf_defconfig
   OUT_DIR: out
   
-  # Компилятор
-  CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
+  # Инструментарий
+  CLANG_URL: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
+  CROSS_COMPILE: aarch64-linux-gnu-
+  CROSS_COMPILE_ARM32: arm-linux-gnueabi-
   
-  # GNU Кросс-компиляторы для линковки
-  COMPILER_64: aarch64-linux-gnu-
-  COMPILER_32: arm-linux-gnueabi-
-  
-  # Пути
-  IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
-  ARTIFACT_AK3: Sirinarity-AK3.zip
+  # Артефакты
+  IMAGE: out/arch/arm64/boot/Image.gz-dtb
+  RELEASE_ZIP: Sirinarity-AK3.zip
 
 jobs:
-  build_core:
-    name: Build & Package
+  build_release:
+    name: Compile & Package
     runs-on: ubuntu-22.04
+    timeout-minutes: 60 # Защита от бесконечного зависания воркера
 
     steps:
-      - name: Checkout Source Code
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
         with:
           clean: true
-          fetch-depth: 1
+          fetch-depth: 0 # Полная история для надежного применения патчей
 
-      - name: Install Build Dependencies
+      - name: ⚙️ Prepare Build Environment
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get update -yqq
+          sudo apt-get install -yqq gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Setup Proton Clang
-        run: |
-          git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
+      - name: 🛠️ Fetch Proton Clang Toolchain
+        run: git clone --depth=1 ${{ env.CLANG_URL }} ${{ env.CLANG_DIR }}
 
-      - name: Apply Kernel Patches
+      - name: 🩹 Apply Kernel Patches
         run: |
-          # Применяем наш патч с изменением имени ядра
+          echo "Applying 01-kernel-name.patch..."
           git apply .github/patches/01-kernel-name.patch
 
-      - name: Compile Kernel
+      - name: 🔨 Compile Kernel
         run: |
-          # 1. Выдаем права на исполнение нашему внешнему скрипту
           chmod +x .github/scripts/clang-wrapper.sh
           
-          # 2. Добавляем оригинальный Clang в PATH (чтобы скрипт мог его вызвать)
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
+          export CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh"
           
-          # 3. Генерируем конфигурацию (тихий режим)
-          make -s O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
-            CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
-            CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
-            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
-            HOSTCFLAGS="-fcommon" \
-            lavender-perf_defconfig
-          
-          # 4. Основная сборка
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
-            CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
-            CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
-            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
+          # Упаковываем все флаги компилятора в Bash-массив (принцип DRY)
+          MAKE_ARGS=(
+            O=${{ env.OUT_DIR }}
+            ARCH=${{ env.ARCH }}
+            CC="$CC"
+            CROSS_COMPILE=${{ env.CROSS_COMPILE }}
+            CROSS_COMPILE_ARM32=${{ env.CROSS_COMPILE_ARM32 }}
+            LLVM=1
+            LLVM_IAS=0
+            HOSTCC=clang
+            HOSTCXX=clang++
+            AR=llvm-ar
+            NM=llvm-nm
+            HOSTAR=llvm-ar
             HOSTCFLAGS="-fcommon"
+          )
+          
+          echo "--- Generating Defconfig ---"
+          make -s "${MAKE_ARGS[@]}" ${{ env.DEFCONFIG }}
+          
+          echo "--- Starting Main Build ---"
+          make -j$(nproc) "${MAKE_ARGS[@]}"
 
-      - name: Package AnyKernel3
+      - name: 📦 Package AnyKernel3 Release
         run: |
-          # 1. Создаем временную рабочую папку
-          mkdir AK3_workdir
+          mkdir release_workspace
+          unzip -q .github/templates/AnyKernel3.zip -d release_workspace
+          cp ${{ env.IMAGE }} release_workspace/
           
-          # 2. Распаковываем твой ZIP-шаблон из скрытой папки
-          unzip -q .github/templates/AnyKernel3.zip -d AK3_workdir
-          
-          # 3. Копируем туда свежесобранное ядро
-          cp ${{ env.IMAGE_PATH }} AK3_workdir/
-          
-          # 4. Заходим внутрь и пакуем финальный архив для прошивки
-          cd AK3_workdir
-          zip -r9 ../${{ env.ARTIFACT_AK3 }} *
+          cd release_workspace
+          zip -r9 ../${{ env.RELEASE_ZIP }} *
           cd ..
 
-      - name: Upload Raw Image
+      - name: 💾 Upload Raw Image
         uses: actions/upload-artifact@v4
         with:
           name: Image.gz-dtb
-          path: ${{ env.IMAGE_PATH }}
+          path: ${{ env.IMAGE }}
+          retention-days: 14
 
-      - name: Upload AnyKernel3 Zip
+      - name: 🚀 Upload Flashable Zip
         uses: actions/upload-artifact@v4
         with:
-          name: Sirinarity-AK3
-          path: ${{ env.ARTIFACT_AK3 }}
+          name: Sirinarity-Kernel-Release
+          path: ${{ env.RELEASE_ZIP }}
+          retention-days: 14
