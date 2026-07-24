@@ -43,18 +43,6 @@ jobs:
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
 
-      - name: Configure Clang Wrapper
-        run: |
-          cat << 'EOF' > ${{ env.CLANG_DIR }}/bin/clang-wrapper
-          #!/bin/bash
-          if [[ "$*" == *"-mfloat-abi="* ]] || [[ "$*" == *"-m32"* ]] || [[ "$*" == *"-marm"* ]]; then
-              exec clang --target=arm-linux-gnueabi -B /usr/bin/arm-linux-gnueabi- -fintegrated-as -Qunused-arguments -Wno-asm-operand-widths "$@"
-          else
-              exec clang --target=aarch64-linux-gnu -B /usr/bin/aarch64-linux-gnu- -Qunused-arguments -Wno-asm-operand-widths "$@"
-          fi
-          EOF
-          chmod +x ${{ env.CLANG_DIR }}/bin/clang-wrapper
-
       - name: Compile Kernel
         run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
