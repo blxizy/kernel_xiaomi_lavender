@@ -40,6 +40,11 @@ jobs:
         run: |
           git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
 
+      - name: Apply Kernel Patches
+        run: |
+          # Применяем наш патч с изменением имени ядра
+          git apply .github/patches/01-kernel-name.patch
+
       - name: Compile Kernel
         run: |
           # 1. Выдаем права на исполнение нашему внешнему скрипту
