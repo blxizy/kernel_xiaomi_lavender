@@ -34,7 +34,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi unzip zip
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Setup Proton Clang
         run: |
