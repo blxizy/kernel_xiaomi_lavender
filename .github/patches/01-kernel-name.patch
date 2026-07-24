@@ -1,1 +1,21 @@
+From 5693d329545b4b4640baeb4da1592285f2517df0 Mon Sep 17 00:00:00 2001
+From: blxizy <hidden@mail.local>
+Date: Fri, 24 Jul 2026 14:56:23 +0300
+Subject: [PATCH] Update lavender-perf_defconfig
 
+---
+ arch/arm64/configs/lavender-perf_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/configs/lavender-perf_defconfig b/arch/arm64/configs/lavender-perf_defconfig
+index 9ae016ed9941..983e79ae473d 100644
+--- a/arch/arm64/configs/lavender-perf_defconfig
++++ b/arch/arm64/configs/lavender-perf_defconfig
+@@ -1,6 +1,6 @@
+ CONFIG_THERMAL_SWITCH=y
+ CONFIG_KERNEL_CUSTOM_F7A=y
+-CONFIG_LOCALVERSION="-Predator-Stormbreaker-10.0-CAF"
++CONFIG_LOCALVERSION="-Sirinarity-kernel-1.0-CAF"
+ CONFIG_LOCALVERSION_AUTO=y
+ CONFIG_DEFAULT_HOSTNAME=""
+ # CONFIG_USELIB is not set
