@@ -1,142 +1,100 @@
-name: Build Sirinarity Kernel
+name: Sirinarity Kernel Release Build
 
 on:
   workflow_dispatch:
 
 env:
-  # === Настройки компиляции ===
-  KERNEL_ARCH: arm64
-  DEFCONFIG_FILE: "lavender-perf_defconfig"
+  # Основные параметры
+  ARCH: arm64
+  DEFCONFIG: lavender-perf_defconfig
   OUT_DIR: out
   
-  # === Компилятор: Proton Clang (Гибридная сборка) ===
-  CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
+  # Инструментарий
+  CLANG_URL: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
+  CROSS_COMPILE: aarch64-linux-gnu-
+  CROSS_COMPILE_ARM32: arm-linux-gnueabi-
   
-  # === Кросс-компиляторы (System GNU GCC для ассемблера, линковки и objcopy) ===
-  COMPILER_64: aarch64-linux-gnu-
-  COMPILER_32: arm-linux-gnueabi-
-  
-  # === Флаги хост-компилятора ===
-  HOST_COMPILER_FLAGS: "-fcommon"
-  
-  # === Флаги LLVM ===
-  LLVM_FLAGS: "LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar"
-  
-  # === Целевое устройство ===
-  DEVICE_CODENAME: lavender
-  
-  # === Пути к исходным и промежуточным файлам ===
-  IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
-  
-  # === Имена выходных артефактов ===
-  ARTIFACT_AK3: Sirinarity-AK3.zip
-  ARTIFACT_BOOT: Sirinarity-boot.img
-  
-  # === Ресурсы для перепаковки (Format 3) ===
-  BOOT_ARCHIVE_PATH: .github/templates/boot.zip
-  
-  # === Внешние репозитории ===
-  ANYKERNEL3_REPO: https://github.com/osm0sis/AnyKernel3.git
+  # Артефакты
+  IMAGE: out/arch/arm64/boot/Image.gz-dtb
+  RELEASE_ZIP: Sirinarity-AK3.zip
 
 jobs:
-  build_core:
-    name: Build Core
+  build_release:
+    name: Compile & Package
     runs-on: ubuntu-22.04
+    timeout-minutes: 60 # Защита от бесконечного зависания воркера
 
     steps:
-      - name: Checkout Source Code
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           clean: true
-          fetch-depth: 1
+          fetch-depth: 0 # Полная история для надежного применения патчей
 
-      - name: Install Base Dependencies
+      - name: ⚙️ Prepare Build Environment
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi jq
+          sudo apt-get update -yqq
+          sudo apt-get install -yqq gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-      - name: Download Clang Toolchain
-        run: |
-          git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
-          # Удаляем встроенные симлинки LLVM
-          rm -f ${{ env.CLANG_DIR }}/bin/aarch64-linux-gnu-*
-          rm -f ${{ env.CLANG_DIR }}/bin/arm-linux-gnueabi-*
-          rm -f ${{ env.CLANG_DIR }}/bin/as
-          rm -f ${{ env.CLANG_DIR }}/bin/ld
+      - name: 🛠️ Fetch Proton Clang Toolchain
+        run: git clone --depth=1 ${{ env.CLANG_URL }} ${{ env.CLANG_DIR }}
 
-      - name: Create Clang Wrapper
+      - name: 🩹 Apply Kernel Patches
         run: |
-          cat << 'EOF' > ${{ env.CLANG_DIR }}/bin/clang-wrapper
-          #!/bin/bash
-          if [[ "$*" == *"-mfloat-abi="* ]] || [[ "$*" == *"-m32"* ]] || [[ "$*" == *"-marm"* ]]; then
-              exec clang --target=arm-linux-gnueabi -B /usr/bin/arm-linux-gnueabi- -fintegrated-as -Qunused-arguments -Wno-asm-operand-widths "$@"
-          else
-              exec clang --target=aarch64-linux-gnu -B /usr/bin/aarch64-linux-gnu- -Qunused-arguments -Wno-asm-operand-widths "$@"
-          fi
-          EOF
-          chmod +x ${{ env.CLANG_DIR }}/bin/clang-wrapper
+          echo "Applying 01-kernel-name.patch..."
+          git apply .github/patches/01-kernel-name.patch
 
-      - name: Patch Kernel Makefiles
+      - name: 🔨 Compile Kernel
         run: |
-          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/kernel/vdso/Makefile
-          sed -i 's/aarch64linux/aarch64elf/g' arch/arm64/Makefile || true
+          chmod +x .github/scripts/clang-wrapper.sh
           
-          if [ -f arch/arm64/kernel/vdso32/Makefile ]; then
-              sed -i 's/-no-integrated-as//g' arch/arm64/kernel/vdso32/Makefile
-          fi
-
-      - name: Compile Kernel
-        run: |
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
+          export CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh"
           
-          make O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} ${{ env.DEFCONFIG_FILE }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          # Упаковываем все флаги компилятора в Bash-массив (принцип DRY)
+          MAKE_ARGS=(
+            O=${{ env.OUT_DIR }}
+            ARCH=${{ env.ARCH }}
+            CC="$CC"
+            CROSS_COMPILE=${{ env.CROSS_COMPILE }}
+            CROSS_COMPILE_ARM32=${{ env.CROSS_COMPILE_ARM32 }}
+            LLVM=1
+            LLVM_IAS=0
+            HOSTCC=clang
+            HOSTCXX=clang++
+            AR=llvm-ar
+            NM=llvm-nm
+            HOSTAR=llvm-ar
+            HOSTCFLAGS="-fcommon"
+          )
           
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} CC="clang-wrapper" CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} ${{ env.LLVM_FLAGS }} HOSTCFLAGS="${{ env.HOST_COMPILER_FLAGS }}"
+          echo "--- Generating Defconfig ---"
+          make -s "${MAKE_ARGS[@]}" ${{ env.DEFCONFIG }}
+          
+          echo "--- Starting Main Build ---"
+          make -j$(nproc) "${MAKE_ARGS[@]}"
 
-      - name: Package Format 2 (AnyKernel3)
+      - name: 📦 Package AnyKernel3 Release
         run: |
-          git clone --depth=1 ${{ env.ANYKERNEL3_REPO }} AK3
-          cp ${{ env.IMAGE_PATH }} AK3/Image.gz-dtb
+          mkdir release_workspace
+          unzip -q .github/templates/AnyKernel3.zip -d release_workspace
+          cp ${{ env.IMAGE }} release_workspace/
           
-          cd AK3
-          sed -i "s/maguro/${{ env.DEVICE_CODENAME }}/g" anykernel.sh
-          sed -i 's/block=.*boot/block=auto/g' anykernel.sh
-          sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel.sh
-          zip -r9 ../${{ env.ARTIFACT_AK3 }} *
+          cd release_workspace
+          zip -r9 ../${{ env.RELEASE_ZIP }} *
           cd ..
 
-      - name: Package Format 3 (Repack boot.img)
-        if: false # [ЗАМОРОЖЕНО] Шаг временно отключен
-        run: |
-          if [ -f "${{ env.BOOT_ARCHIVE_PATH }}" ]; then
-            unzip -q ${{ env.BOOT_ARCHIVE_PATH }} -d .
-            
-            # Динамическая загрузка статического универсального magiskboot (без AVX-зависимостей)
-            wget -qO magiskboot https://github.com/xiaolu/magiskboot_build/releases/latest/download/magiskboot_x86_64
-            chmod +x magiskboot
-            
-            ./magiskboot unpack boot.img
-            cp ${{ env.IMAGE_PATH }} kernel
-            ./magiskboot repack boot.img ${{ env.ARTIFACT_BOOT }}
-          fi
-
-      - name: Upload Raw Kernel
+      - name: 💾 Upload Raw Image
         uses: actions/upload-artifact@v4
         with:
           name: Image.gz-dtb
-          path: ${{ env.IMAGE_PATH }}
+          path: ${{ env.IMAGE }}
+          retention-days: 14
 
-      - name: Upload AnyKernel3
+      - name: 🚀 Upload Flashable Zip
         uses: actions/upload-artifact@v4
         with:
-          name: Sirinarity-AK3
-          path: ${{ env.ARTIFACT_AK3 }}
-
-      # - name: Upload Boot Image
-      #   uses: actions/upload-artifact@v4
-      #   if: false # [ЗАМОРОЖЕНО] Шаг временно отключен
-      #   with:
-      #     name: Sirinarity-Boot
-      #     path: ${{ env.ARTIFACT_BOOT }}
+          name: Sirinarity-Kernel-Release
+          path: ${{ env.RELEASE_ZIP }}
+          retention-days: 14
