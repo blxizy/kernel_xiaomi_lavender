@@ -81,8 +81,8 @@ jobs:
           echo "Applying 07-ksun-reboot.patch..."
           git apply .github/patches/07-ksun-reboot.patch
           
-          echo "Isolating compat syscall fix strictly to KernelSU module and its subdirectories..."
-          echo "subdir-ccflags-y += -Din_compat_syscall=is_compat_task" >> KernelSU-Next/kernel/Makefile
+          echo "Patching in_compat_syscall for legacy kernels directly in source..."
+          sed -i 's/in_compat_syscall/is_compat_task/g' KernelSU-Next/kernel/sulog/event.c
 
       - name: Compile Kernel
         run: |
