@@ -1,0 +1,36 @@
+From 9b15d8e91949188f5fb4bba5f4f666fe69dfe2c1 Mon Sep 17 00:00:00 2001
+From: blxizy <hidden@mail.local>
+Date: Sun, 26 Jul 2026 19:48:23 +0300
+Subject: [PATCH] Update stat.c
+
+---
+ fs/stat.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/fs/stat.c b/fs/stat.c
+index 004dd77c3b93..33acae6dd9b3 100644
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -287,6 +287,12 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
+ 	return cp_new_stat(&stat, statbuf);
+ }
+ 
++#ifdef CONFIG_KSU
++__attribute__((hot)) 
++extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
++				int *flags);
++#endif
++
+ #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
+ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+ 		struct stat __user *, statbuf, int, flag)
+@@ -294,6 +300,9 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+ 	struct kstat stat;
+ 	int error;
+ 
++#ifdef CONFIG_KSU
++	ksu_handle_stat(&dfd, &filename, &flag);
++#endif
+ 	error = vfs_fstatat(dfd, filename, &stat, flag);
+ 	if (error)
+ 		return error;
