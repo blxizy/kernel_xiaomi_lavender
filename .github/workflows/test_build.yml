@@ -1,100 +1,126 @@
-name: Sirinarity Kernel Release Build
+name: Refactored Kernel Build Test
 
 on:
   workflow_dispatch:
+    inputs:
+      build_variant:
+        description: 'Выберите вариант сборки ядра'
+        required: true
+        type: choice
+        options:
+          - stock
+          - kernelsu-next
+        default: stock
 
 env:
-  # Основные параметры
-  ARCH: arm64
-  DEFCONFIG: lavender-perf_defconfig
+  KERNEL_ARCH: arm64
   OUT_DIR: out
   
-  # Инструментарий
-  CLANG_URL: https://github.com/kdrag0n/proton-clang.git
+  # Компилятор
+  CLANG_REPO: https://github.com/kdrag0n/proton-clang.git
   CLANG_DIR: toolchain
-  CROSS_COMPILE: aarch64-linux-gnu-
-  CROSS_COMPILE_ARM32: arm-linux-gnueabi-
   
-  # Артефакты
-  IMAGE: out/arch/arm64/boot/Image.gz-dtb
-  RELEASE_ZIP: Sirinarity-AK3.zip
+  # GNU Кросс-компиляторы для линковки
+  COMPILER_64: aarch64-linux-gnu-
+  COMPILER_32: arm-linux-gnueabi-
+  
+  # Пути
+  IMAGE_PATH: out/arch/arm64/boot/Image.gz-dtb
+  
+  # Динамическое имя артефакта на основе выбора пользователя
+  ARTIFACT_AK3: Sirinarity-AK3-${{ github.event.inputs.build_variant }}.zip
 
 jobs:
-  build_release:
-    name: Compile & Package
+  build_core:
+    name: Build & Package (${{ github.event.inputs.build_variant }})
     runs-on: ubuntu-22.04
-    timeout-minutes: 60 # Защита от бесконечного зависания воркера
 
     steps:
-      - name: 📥 Checkout Repository
+      - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
           clean: true
-          fetch-depth: 0 # Полная история для надежного применения патчей
+          fetch-depth: 1
 
-      - name: ⚙️ Prepare Build Environment
+      - name: Install Build Dependencies
         run: |
-          sudo apt-get update -yqq
-          sudo apt-get install -yqq gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi unzip zip
 
-      - name: 🛠️ Fetch Proton Clang Toolchain
-        run: git clone --depth=1 ${{ env.CLANG_URL }} ${{ env.CLANG_DIR }}
+      - name: Setup Proton Clang
+        run: |
+          git clone --depth=1 ${{ env.CLANG_REPO }} ${{ env.CLANG_DIR }}
 
-      - name: 🩹 Apply Kernel Patches
+      - name: Apply Kernel Patches
         run: |
           echo "Applying 01-kernel-name.patch..."
           git apply .github/patches/01-kernel-name.patch
 
-      - name: 🔨 Compile Kernel
+     # --- БЛОК ИНТЕГРАЦИИ KERNELSU NEXT ---
+      - name: Integrate KernelSU Next
+        if: ${{ github.event.inputs.build_variant == 'kernelsu-next' }}
         run: |
+          echo "Downloading and running KernelSU-Next setup..."
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+
+          echo "Applying 02-ksun-manual-hooks.patch..."
+          git apply .github/patches/02-ksun-manual-hooks.patch
+
+          echo "Applying 03-ksun-exec.patch..."
+          git apply .github/patches/03-ksun-exec.patch
+
+          echo "Applying 04-ksun-open.patch..."
+          git apply .github/patches/04-ksun-open.patch
+
+          echo "Applying 05-ksun-read_write.patch..."
+          git apply .github/patches/05-ksun-read_write.patch
+
+          echo "Applying 06-ksun-stat.patch..."
+          git apply .github/patches/06-ksun-stat.patch
+
+          echo "Applying 07-ksun-reboot.patch..."
+          git apply .github/patches/07-ksun-reboot.patch
+
+      - name: Compile Kernel
+        run: |
+          # 1. Выдаем права на исполнение нашему внешнему скрипту
           chmod +x .github/scripts/clang-wrapper.sh
           
+          # 2. Добавляем оригинальный Clang в PATH
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
-          export CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh"
           
-          # Упаковываем все флаги компилятора в Bash-массив (принцип DRY)
-          MAKE_ARGS=(
-            O=${{ env.OUT_DIR }}
-            ARCH=${{ env.ARCH }}
-            CC="$CC"
-            CROSS_COMPILE=${{ env.CROSS_COMPILE }}
-            CROSS_COMPILE_ARM32=${{ env.CROSS_COMPILE_ARM32 }}
-            LLVM=1
-            LLVM_IAS=0
-            HOSTCC=clang
-            HOSTCXX=clang++
-            AR=llvm-ar
-            NM=llvm-nm
-            HOSTAR=llvm-ar
+          # 3. Генерируем конфигурацию (тихий режим)
+          make -s O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
+            CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
+            CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
+            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
+            HOSTCFLAGS="-fcommon" \
+            lavender-perf_defconfig
+          
+          # 4. Основная сборка
+          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
+            CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
+            CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
+            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
             HOSTCFLAGS="-fcommon"
-          )
-          
-          echo "--- Generating Defconfig ---"
-          make -s "${MAKE_ARGS[@]}" ${{ env.DEFCONFIG }}
-          
-          echo "--- Starting Main Build ---"
-          make -j$(nproc) "${MAKE_ARGS[@]}"
 
-      - name: 📦 Package AnyKernel3 Release
+      - name: Package AnyKernel3
         run: |
-          mkdir release_workspace
-          unzip -q .github/templates/AnyKernel3.zip -d release_workspace
-          cp ${{ env.IMAGE }} release_workspace/
-          
-          cd release_workspace
-          zip -r9 ../${{ env.RELEASE_ZIP }} *
+          mkdir AK3_workdir
+          unzip -q .github/templates/AnyKernel3.zip -d AK3_workdir
+          cp ${{ env.IMAGE_PATH }} AK3_workdir/
+          cd AK3_workdir
+          zip -r9 ../${{ env.ARTIFACT_AK3 }} *
           cd ..
 
-      - name: 💾 Upload Raw Image
+      - name: Upload Raw Image
         uses: actions/upload-artifact@v4
         with:
-          name: Image.gz-dtb
-          path: ${{ env.IMAGE }}
-          retention-days: 14
+          name: Image-${{ github.event.inputs.build_variant }}.gz-dtb
+          path: ${{ env.IMAGE_PATH }}
 
-      - name: 🚀 Upload Flashable Zip
+      - name: Upload AnyKernel3 Zip
         uses: actions/upload-artifact@v4
         with:
-          name: Sirinarity-Kernel-Release
-          path: ${{ env.RELEASE_ZIP }}
-          retention-days: 14
+          name: Sirinarity-AK3-${{ github.event.inputs.build_variant }}
+          path: ${{ env.ARTIFACT_AK3 }}
