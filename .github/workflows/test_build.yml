@@ -107,6 +107,18 @@ jobs:
             HOSTCFLAGS="-fcommon" \
             KCFLAGS="$EXTRA_KCFLAGS" \
             lavender-perf_defconfig
+            
+          # 4.5 Принудительный запуск авто-патчера KernelSU-Next (инжект path_umount до компиляции)
+          if [ "${{ github.event.inputs.build_variant }}" == "kernelsu-next" ]; then
+            echo "Pre-evaluating KernelSU Makefile to trigger early path_umount injection..."
+            make -s -n O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
+              CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
+              CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
+              LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
+              HOSTCFLAGS="-fcommon" \
+              KCFLAGS="$EXTRA_KCFLAGS" \
+              drivers/kernelsu/ || true
+          fi
           
           # 5. Основная сборка
           make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
