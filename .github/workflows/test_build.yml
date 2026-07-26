@@ -56,7 +56,7 @@ jobs:
           echo "Applying 01-kernel-name.patch..."
           git apply .github/patches/01-kernel-name.patch
 
-     # --- БЛОК ИНТЕГРАЦИИ KERNELSU NEXT ---
+      # --- БЛОК ИНТЕГРАЦИИ KERNELSU NEXT ---
       - name: Integrate KernelSU Next
         if: ${{ github.event.inputs.build_variant == 'kernelsu-next' }}
         run: |
@@ -88,21 +88,30 @@ jobs:
           
           # 2. Добавляем оригинальный Clang в PATH
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
+
+          # 3. Динамические флаги компилятора в зависимости от варианта сборки
+          EXTRA_KCFLAGS=""
+          if [ "${{ github.event.inputs.build_variant }}" == "kernelsu-next" ]; then
+            EXTRA_KCFLAGS="-Din_compat_syscall=is_compat_task"
+            echo "Активирован специальный флаг для KernelSU Next: $EXTRA_KCFLAGS"
+          fi
           
-          # 3. Генерируем конфигурацию (тихий режим)
+          # 4. Генерируем конфигурацию (тихий режим)
           make -s O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
             CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
             CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
             LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
             HOSTCFLAGS="-fcommon" \
+            KCFLAGS="$EXTRA_KCFLAGS" \
             lavender-perf_defconfig
           
-          # 4. Основная сборка
+          # 5. Основная сборка
           make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
             CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
             CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
             LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
-            HOSTCFLAGS="-fcommon"
+            HOSTCFLAGS="-fcommon" \
+            KCFLAGS="$EXTRA_KCFLAGS"
 
       - name: Package AnyKernel3
         run: |
