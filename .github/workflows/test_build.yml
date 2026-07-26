@@ -80,6 +80,9 @@ jobs:
 
           echo "Applying 07-ksun-reboot.patch..."
           git apply .github/patches/07-ksun-reboot.patch
+          
+          echo "Isolating compat syscall fix strictly to KernelSU module..."
+          echo "ccflags-y += -Din_compat_syscall=is_compat_task" >> KernelSU-Next/kernel/Makefile
 
       - name: Compile Kernel
         run: |
@@ -92,7 +95,7 @@ jobs:
           # 3. Динамические флаги компилятора в зависимости от варианта сборки
           EXTRA_KCFLAGS=""
           if [ "${{ github.event.inputs.build_variant }}" == "kernelsu-next" ]; then
-            EXTRA_KCFLAGS="-Din_compat_syscall=is_compat_task -D__nocfi= -Wno-macro-redefined '-DALIGN_DOWN(x,a)=ALIGN((x)-((a)-1),(a))'"
+            EXTRA_KCFLAGS="-D__nocfi= -Wno-macro-redefined '-DALIGN_DOWN(x,a)=ALIGN((x)-((a)-1),(a))'"
             echo "Активирован специальный флаг для KernelSU Next: $EXTRA_KCFLAGS"
           fi
           
