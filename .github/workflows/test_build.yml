@@ -80,6 +80,9 @@ jobs:
 
           echo "Applying 07-ksun-reboot.patch..."
           git apply .github/patches/07-ksun-reboot.patch
+
+          echo "Applying 08-ksun-services.patch..."
+          git apply .github/patches/08-ksun-services.patch
           
           echo "Patching in_compat_syscall for legacy kernels directly in source..."
           sed -i 's/in_compat_syscall/is_compat_task/g' KernelSU-Next/kernel/sulog/event.c
