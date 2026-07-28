@@ -29,6 +29,9 @@ env:
   
   # Динамическое имя артефакта на основе выбора пользователя
   ARTIFACT_AK3: Sirinarity-AK3-${{ github.event.inputs.build_variant }}.zip
+  
+  # Фикс для предупреждений о переходе GitHub Actions на Node.js 24
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   build_core:
