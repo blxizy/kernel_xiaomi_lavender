@@ -84,6 +84,9 @@ jobs:
           echo "Applying 07-ksun-reboot.patch..."
           git apply .github/patches/07-ksun-reboot.patch
 
+          echo "Applying 08-ksun-event.patch..."
+          git apply .github/patches/08-ksun-event.patch
+
       - name: Compile Kernel
         run: |
           # 1. Выдаем права на исполнение нашему внешнему скрипту
