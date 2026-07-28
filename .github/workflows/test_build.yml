@@ -83,9 +83,6 @@ jobs:
 
           echo "Applying 07-ksun-reboot.patch..."
           git apply .github/patches/07-ksun-reboot.patch
-          
-          echo "Patching in_compat_syscall for legacy kernels directly in source..."
-          sed -i 's/in_compat_syscall/is_compat_task/g' KernelSU-Next/kernel/sulog/event.c
 
       - name: Compile Kernel
         run: |
@@ -94,13 +91,6 @@ jobs:
           
           # 2. Добавляем оригинальный Clang в PATH
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
-
-          # 3. Динамические флаги компилятора в зависимости от варианта сборки
-          EXTRA_KCFLAGS=""
-          if [ "${{ github.event.inputs.build_variant }}" == "kernelsu-next" ]; then
-            EXTRA_KCFLAGS="-D__nocfi= -Wno-macro-redefined '-DALIGN_DOWN(x,a)=ALIGN((x)-((a)-1),(a))'"
-            echo "Активирован специальный флаг для KernelSU Next: $EXTRA_KCFLAGS"
-          fi
           
           # 4. Генерируем конфигурацию (тихий режим)
           make -s O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
@@ -108,28 +98,14 @@ jobs:
             CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
             LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
             HOSTCFLAGS="-fcommon" \
-            KCFLAGS="$EXTRA_KCFLAGS" \
             lavender-perf_defconfig
-            
-          # 4.5 Принудительный запуск авто-патчера KernelSU-Next (инжект path_umount до компиляции)
-          if [ "${{ github.event.inputs.build_variant }}" == "kernelsu-next" ]; then
-            echo "Pre-evaluating KernelSU Makefile to trigger early path_umount injection..."
-            make -s -n O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
-              CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
-              CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
-              LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
-              HOSTCFLAGS="-fcommon" \
-              KCFLAGS="$EXTRA_KCFLAGS" \
-              drivers/kernelsu/ || true
-          fi
           
           # 5. Основная сборка
           make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
             CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
             CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
             LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
-            HOSTCFLAGS="-fcommon" \
-            KCFLAGS="$EXTRA_KCFLAGS"
+            HOSTCFLAGS="-fcommon"
 
       - name: Package AnyKernel3
         run: |
