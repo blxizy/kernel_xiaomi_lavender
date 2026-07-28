@@ -88,19 +88,19 @@ jobs:
         run: |
           # 1. Выдаем права на исполнение нашему внешнему скрипту
           chmod +x .github/scripts/clang-wrapper.sh
-          
+
           # 2. Добавляем оригинальный Clang в PATH
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          # 4. Генерируем конфигурацию (тихий режим)
+          # 3. Генерируем конфигурацию (тихий режим)
           make -s O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
             CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
             CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
             LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
             HOSTCFLAGS="-fcommon" \
             lavender-perf_defconfig
-          
-          # 5. Основная сборка
+
+          # 4. Основная сборка
           make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
             CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
             CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
