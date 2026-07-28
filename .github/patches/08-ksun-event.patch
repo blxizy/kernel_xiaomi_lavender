@@ -1,0 +1,15 @@
+diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
+index bf9c2614..5315c9da 100644
+--- a/kernel/sulog/event.c
++++ b/kernel/sulog/event.c
+@@ -19,6 +19,10 @@
+ #include "klog.h" // IWYU pragma: keep
+ #include "sulog/event.h"
+ 
++#ifndef in_compat_syscall
++#define in_compat_syscall is_compat_task
++#endif
++
+ #define KSU_SULOG_MAX_QUEUED 256U
+ #define KSU_SULOG_MAX_PAYLOAD_LEN 2048U
+ #define KSU_SULOG_MAX_ARG_STRINGS 0x7FFFFFFF
