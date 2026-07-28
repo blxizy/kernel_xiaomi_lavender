@@ -2025,6 +2025,13 @@ int security_load_policy(void *data, size_t len)
 	int rc = 0;
 	struct policy_file file = { data, len }, *fp = &file;
 
+#ifdef CONFIG_KSU
+	extern void ksu_handle_sepolicy(void **macropolicy, size_t *macropolicy_len);
+	ksu_handle_sepolicy(&data, &len);
+	
+	file.data = data;
+	file.len = len;
+#endif
 	oldpolicydb = kzalloc(2 * sizeof(*oldpolicydb), GFP_KERNEL);
 	if (!oldpolicydb) {
 		rc = -ENOMEM;
