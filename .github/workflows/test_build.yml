@@ -85,7 +85,7 @@ jobs:
           git apply .github/patches/07-ksun-reboot.patch
 
           echo "Applying 08-ksun-event.patch..."
-          git apply .github/patches/08-ksun-event.patch
+          git -C KernelSU-Next apply ../.github/patches/08-ksun-event.patch
 
       - name: Compile Kernel
         run: |
