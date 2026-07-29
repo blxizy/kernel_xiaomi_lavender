@@ -93,23 +93,6 @@ jobs:
           echo "Applying 10-ksun-selinux-hide.patch..."
           git -C KernelSU-Next apply ../.github/patches/10-ksun-selinux-hide.patch
 
-      - name: Pre-inject KernelSU umount
-        if: ${{ github.event.inputs.build_variant == 'kernelsu-next' }}
-        run: |
-          echo "Forcing KernelSU-Next to inject path_umount before fs/ is compiled..."
-          
-          # Выдаем права скрипту, так как этот шаг идет до основной компиляции
-          chmod +x .github/scripts/clang-wrapper.sh
-          export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
-          
-          # Холостой прогон Makefile от KSU для инъекции кода в fs/namespace.c
-          make -s -n O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
-            CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
-            CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
-            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
-            HOSTCFLAGS="-fcommon" \
-            drivers/kernelsu/ || true
-
       - name: Compile Kernel
         run: |
           # 1. Выдаем права на исполнение нашему внешнему скрипту
@@ -118,21 +101,34 @@ jobs:
           # 2. Добавляем оригинальный Clang в PATH
           export PATH="$GITHUB_WORKSPACE/${{ env.CLANG_DIR }}/bin:$PATH"
           
-          # 3. Генерируем конфигурацию (тихий режим)
-          make -s O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
-            CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
-            CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
-            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
-            HOSTCFLAGS="-fcommon" \
-            lavender-perf_defconfig
-
-          # 4. Основная сборка
-          make -j$(nproc) O=${{ env.OUT_DIR }} ARCH=${{ env.KERNEL_ARCH }} \
-            CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh" \
-            CROSS_COMPILE=${{ env.COMPILER_64 }} CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }} \
-            LLVM=1 LLVM_IAS=0 HOSTCC=clang HOSTCXX=clang++ AR=llvm-ar NM=llvm-nm HOSTAR=llvm-ar \
+          # 3. Упаковываем все аргументы компилятора в Bash-массив (DRY принцип)
+          MAKE_ARGS=(
+            O=${{ env.OUT_DIR }}
+            ARCH=${{ env.KERNEL_ARCH }}
+            CC="$GITHUB_WORKSPACE/.github/scripts/clang-wrapper.sh"
+            CROSS_COMPILE=${{ env.COMPILER_64 }}
+            CROSS_COMPILE_ARM32=${{ env.COMPILER_32 }}
+            LLVM=1
+            LLVM_IAS=0
+            HOSTCC=clang
+            HOSTCXX=clang++
+            AR=llvm-ar
+            NM=llvm-nm
+            HOSTAR=llvm-ar
             HOSTCFLAGS="-fcommon"
+          )
+          
+          # 4. Генерируем конфигурацию (тихий режим)
+          make -s "${MAKE_ARGS[@]}" lavender-perf_defconfig
 
+          # 5. ХАК АРХИТЕКТУРЫ KERNELSU (Выполняется строго для варианта kernelsu-next)
+          if [ "${{ github.event.inputs.build_variant }}" = "kernelsu-next" ]; then
+              echo "Forcing KernelSU-Next to inject path_umount before fs/ is compiled..."
+              make -s -n "${MAKE_ARGS[@]}" drivers/kernelsu/ || true
+          fi
+
+          # 6. Основная сборка
+          make -j$(nproc) "${MAKE_ARGS[@]}"
       - name: Package AnyKernel3
         run: |
           mkdir AK3_workdir
