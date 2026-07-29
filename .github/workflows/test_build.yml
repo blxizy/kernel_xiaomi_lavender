@@ -90,6 +90,9 @@ jobs:
           echo "Applying 09-ksun-adb-root.patch..."
           git -C KernelSU-Next apply ../.github/patches/09-ksun-adb-root.patch
 
+          echo "Applying 10-ksun-selinux-hide.patch..."
+          git -C KernelSU-Next apply ../.github/patches/10-ksun-selinux-hide.patch
+
       - name: Compile Kernel
         run: |
           # 1. Выдаем права на исполнение нашему внешнему скрипту
