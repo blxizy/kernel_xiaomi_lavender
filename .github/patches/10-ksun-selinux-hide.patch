@@ -1,0 +1,22 @@
+diff --git a/kernel/feature/selinux_hide.c b/kernel/feature/selinux_hide.c
+index b47b5311..a0ad5851 100644
+--- a/kernel/feature/selinux_hide.c
++++ b/kernel/feature/selinux_hide.c
+@@ -18,6 +18,10 @@
+ #include "selinux/selinux.h"
+ #include "feature/selinux_hide.h"
+ 
++#ifndef __nocfi
++#define __nocfi
++#endif
++
+ #if defined(CONFIG_KPROBES)
+ extern struct kprobe *init_kprobe(const char *name, int (*pre_handler)(struct kprobe *, struct pt_regs *));
+ extern void destroy_kprobe(struct kprobe **kp_ptr);
+@@ -311,4 +315,4 @@ void __exit ksu_selinux_hide_exit(void)
+ 		fake_status = NULL;
+ 	}
+ 	mutex_unlock(&fake_status_init_mutex);
+-}
+\ No newline at end of file
++}
