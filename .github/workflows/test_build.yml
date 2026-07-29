@@ -87,6 +87,9 @@ jobs:
           echo "Applying 08-ksun-event.patch..."
           git -C KernelSU-Next apply ../.github/patches/08-ksun-event.patch
 
+          echo "Applying 09-ksun-adb-root.patch..."
+          git -C KernelSU-Next apply ../.github/patches/09-ksun-adb-root.patch
+
       - name: Compile Kernel
         run: |
           # 1. Выдаем права на исполнение нашему внешнему скрипту
